@@ -18,6 +18,7 @@ package v1
 
 import (
 	"errors"
+	"fmt"
 
 	semver "github.com/Masterminds/semver/v3"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -60,6 +61,16 @@ func (r *PtpOperatorConfig) validate() error {
 					"v2. Consumers using v1 will no longer be able to communicate " +
 					"with the PTP event system. Please upgrade to v2 and follow " +
 					"the documentation to make the necessary changes.")
+			}
+		}
+	}
+
+	// Validate plugin names
+	if r.Spec.EnabledPlugins != nil {
+		for pluginName := range *r.Spec.EnabledPlugins {
+			if !IsValidPlugin(pluginName) {
+				return fmt.Errorf("unknown plugin '%s' in enabledPlugins. Valid plugins: %v",
+					pluginName, AvailablePlugins)
 			}
 		}
 	}
