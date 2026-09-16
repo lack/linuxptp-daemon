@@ -55,6 +55,16 @@ func Test_BatchEnableNavMsgs(t *testing.T) {
 	}
 }
 
+func Test_BatchEnableTimMsgs(t *testing.T) {
+	cmd := batchEnableTimMsgs(navEnableMsg)
+	for _, msg := range navEnableMsg {
+		for _, bus := range ublxBusTypes {
+			expected := fmt.Sprintf("CFG-MSGOUT-UBX_TIM_%s_%s,1", msg, bus)
+			assert.Contains(t, cmd.Args, expected)
+		}
+	}
+}
+
 func Test_BatchEnableNavMsgsAtRate(t *testing.T) {
 	cmd := batchEnableNavMsgsAtRate(navSlowEnableMsg, timeLSRateSeconds)
 	for _, msg := range navSlowEnableMsg {

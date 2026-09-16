@@ -49,6 +49,9 @@ var (
 	navSlowEnableMsg = []string{
 		"TIMELS",
 	}
+	timEnableMsg = []string{
+		"SVIN",
+	}
 
 	// Enable all NMEA messages
 	enableNMEA     = Command{Args: []string{"-e", "NMEA"}}
@@ -91,6 +94,12 @@ func batchEnableNavMsgs(msgs []string) Command {
 	return batchMsgoutAllBusses("UBX_NAV", msgs, 1)
 }
 
+// batchEnableTimMsgs generates commands to enable the given TIM message types
+// at a rate of 1 (every GPS navigation epoch, i.e. every second) on all bus types.
+func batchEnableTimMsgs(msgs []string) Command {
+	return batchMsgoutAllBusses("UBX_TIM", msgs, 1)
+}
+
 // batchEnableNavMsgsAtRate generates commands to enable the given NAV message types
 // at the specified rate (in GPS navigation epochs) on all bus types.
 // batchEnableNavMsgsAtRate creates commands enabling NAV messages at rate.
@@ -105,6 +114,7 @@ func defaultUblxCmds() CommandList {
 	cmds := CommandList{disableBinary}
 	// Re-enable high-frequency binary commands (every second)
 	cmds = append(cmds, batchEnableNavMsgs(navEnableMsg))
+	cmds = append(cmds, batchEnableTimMsgs(timEnableMsg))
 	// Re-enable low-frequency binary commands (every minute)
 	cmds = append(cmds, batchEnableNavMsgsAtRate(navSlowEnableMsg, timeLSRateSeconds))
 	// Next, enable all NMEA commands, but prune out any we don't need:
