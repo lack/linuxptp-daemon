@@ -1230,7 +1230,7 @@ func (dn *Daemon) applyNodePtpProfile(runID int, nodeProfile *ptpv1.PtpProfile) 
 			}
 			if clockType == event.GM {
 				// If a HardwareConfig defines a GNSS source, locate the serial port and any GNSS initialization commands.
-				var gnssInitCmds ublox.CommandList
+				var gnssInitConfig *ublox.InitConfig
 				if nodeProfile.Name != nil && dn.hardwareConfigManager.ReadyHardwareConfigForProfile(*nodeProfile.Name) {
 					gnssPort, gnssErr := dn.hardwareConfigManager.GetGNSSSerialPort(nodeProfile)
 					if gnssErr != nil {
@@ -1240,8 +1240,8 @@ func (dn *Daemon) applyNodePtpProfile(runID int, nodeProfile *ptpv1.PtpProfile) 
 						output.gnss_serial_port = gnssPort
 					}
 
-					gnssInitCmds = dn.hardwareConfigManager.GetGNSSInitCommands(nodeProfile)
-					glog.Infof("HardwareConfig GNSS initialization added %d additional commands", len(gnssInitCmds))
+					gnssInitConfig = dn.hardwareConfigManager.GetGNSSInitConfig(nodeProfile)
+					glog.Infof("HardwareConfig GNSS initialization configured: %t", gnssInitConfig != nil)
 				}
 
 				if output.gnss_serial_port == "" {
@@ -1275,17 +1275,17 @@ func (dn *Daemon) applyNodePtpProfile(runID int, nodeProfile *ptpv1.PtpProfile) 
 				}
 
 				gpsDaemon := &GPSD{
-					name:          GPSD_PROCESSNAME,
-					execMutex:     sync.Mutex{},
-					cmd:           nil,
-					serialPort:    output.gnss_serial_port,
-					exitCh:        make(chan struct{}),
-					gmInterface:   gmInterface,
-					stopped:       false,
-					messageTag:    messageTag,
-					ublxTool:      nil,
-					gnssInitCmds:  gnssInitCmds,
-					gnssResultsFn: gnssResultsFn,
+					name:           GPSD_PROCESSNAME,
+					execMutex:      sync.Mutex{},
+					cmd:            nil,
+					serialPort:     output.gnss_serial_port,
+					exitCh:         make(chan struct{}),
+					gmInterface:    gmInterface,
+					stopped:        false,
+					messageTag:     messageTag,
+					ublxTool:       nil,
+					gnssInitConfig: gnssInitConfig,
+					gnssResultsFn:  gnssResultsFn,
 				}
 				gpsDaemon.CmdInit()
 				gpsDaemon.cmdLine = addScheduling(nodeProfile, gpsDaemon.cmdLine)
