@@ -53,7 +53,7 @@ type GPSD struct {
 	gmInterface          string
 	messageTag           string
 	ublxTool             *ublox.UBlox
-	gnssInitCmds         ublox.CommandList      // optional HardwareConfig GNSS init commands
+	gnssInitConfig       *ublox.InitConfig      // optional HardwareConfig GNSS configuration
 	gnssResultsFn        func(results []string) // callback to store GNSS init results
 	gpsdSession          *gpsdlib.Session
 	gpsdDoneCh           chan bool
@@ -220,7 +220,7 @@ func (g *GPSD) MonitorGNSSEventsWithUblox() {
 		ticker.Stop()
 	}()
 	for {
-		ublx, err := ublox.NewUblox(g.gnssInitCmds...)
+		ublx, err := ublox.NewUblox(g.gnssInitConfig)
 		if err != nil {
 			glog.Errorf("failed to initialize GNSS monitoring via ublox %s", err)
 			select {
