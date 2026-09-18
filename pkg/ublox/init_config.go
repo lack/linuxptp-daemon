@@ -97,10 +97,14 @@ func BuildInitCommands(protoVersion string, config *InitConfig) CommandList {
 	}
 
 	if config.SurveyIn != nil && config.SurveyIn.ObservationTime > 0 {
-		cmds = append(cmds, Command{Args: []string{
-			"-t", "-w", "5", "-v", "1", "-e",
-			fmt.Sprintf("SURVEYIN,%d,%d", config.SurveyIn.ObservationTime, config.SurveyIn.AccuracyMeters*10000),
-		}, ReportOutput: true})
+		cmds = append(cmds,
+			Command{Args: []string{
+				"-z", fmt.Sprintf("CFG-TMODE-SVIN_MIN_DUR,%d", config.SurveyIn.ObservationTime),
+				"-z", fmt.Sprintf("CFG-TMODE-SVIN_ACC_LIMIT,%d", config.SurveyIn.AccuracyMeters*10000),
+				"-z", "CFG-TMODE-MODE,1",
+			}},
+			Command{Args: []string{"-p", "TIM-SVIN"}, ReportOutput: true},
+		)
 	}
 	cmds = append(cmds, config.ExtraCommands...)
 	return cmds
