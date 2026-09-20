@@ -965,7 +965,7 @@ func TestDeriveBehavior_MergesUserGNSSConfig(t *testing.T) {
 			expectedGnssConfig: &ptpv2alpha1.GNSSConfig{
 				Init: ptpv2alpha1.GNSSInit{},
 				Match: &ptpv2alpha1.GNSSMatcher{
-					TTYDevice: testACM0,
+					USBDevice: &ptpv2alpha1.USBDevice{Vendor: "1546", Product: "01a9"},
 				},
 			},
 		},
@@ -1023,7 +1023,7 @@ func TestDeriveBehavior_MergesUserGNSSConfig(t *testing.T) {
 					},
 				},
 				Match: &ptpv2alpha1.GNSSMatcher{
-					TTYDevice: testACM0,
+					USBDevice: &ptpv2alpha1.USBDevice{Vendor: "1546", Product: "01a9"},
 				},
 			},
 		},
