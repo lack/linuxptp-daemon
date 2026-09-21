@@ -12,7 +12,9 @@ behaviorProfiles:
         boardLabel: GNSS_1PPS_IN
         gnssConfig:
           match:
-            ttyDevice: "/dev/ttyACM0"
+            serialDevice:
+              acpi:
+                hid: INTC10EE
 
     conditions:
       - name: "Initialize T-GM"
