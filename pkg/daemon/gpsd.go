@@ -98,12 +98,7 @@ func NewGpsdProcess(serialPort string, gmInterface string, messageTag string, gn
 		eventCh:       eventCh,
 		processConfig: processCfg,
 		profile:       nodeProfile,
-		conditions: map[process.Action]process.Condition{
-			process.ActionStart: process.OnProcessUp{
-				Source:     event.GPSPIPE,
-				ConfigName: processCfg.ConfigName,
-			},
-		},
+		conditions:    map[process.Action]process.Condition{},
 	}
 }
 

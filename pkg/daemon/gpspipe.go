@@ -48,7 +48,7 @@ type GpsPipe struct {
 }
 
 // NewGpsPipeProcess creates a new GpsPipe process instance.
-func NewGpsPipeProcess(messageTag string, nodeProfile *ptpv1.PtpProfile, eventCh chan event.Event) process.Process {
+func NewGpsPipeProcess(messageTag string, nodeProfile *ptpv1.PtpProfile, eventCh chan event.Event, configName string) process.Process {
 	cmdLine := addScheduling(nodeProfile, fmt.Sprintf("/usr/local/bin/gpspipe -v -R -l -o %s", GPSPIPE_SERIALPORT))
 	args := strings.Split(cmdLine, " ")
 
@@ -60,7 +60,12 @@ func NewGpsPipeProcess(messageTag string, nodeProfile *ptpv1.PtpProfile, eventCh
 		messageTag: messageTag,
 		profile:    nodeProfile,
 		eventCh:    eventCh,
-		conditions: map[process.Action]process.Condition{},
+		conditions: map[process.Action]process.Condition{
+			process.ActionStart: process.OnProcessUp{
+				Source:     event.GPSD,
+				ConfigName: configName,
+			},
+		},
 	}
 	return gp
 }
@@ -343,7 +348,7 @@ func isValidDirectory(dirPath string) bool {
 		return false
 	}
 	testFile := filepath.Join(dirPath, ".test_write_access")
-	if err = os.WriteFile(testFile, []byte("test"), 0600); err != nil {
+	if err = os.WriteFile(testFile, []byte("test"), 0o600); err != nil {
 		return false
 	}
 	_ = os.Remove(testFile)
@@ -370,7 +375,7 @@ func removeExistingPipe(pipePath string) error {
 
 // createNewPipe creates the named pipe using syscall.Mkfifo
 func createNewPipe(pipePath string) error {
-	if err := syscall.Mkfifo(pipePath, 0600); err != nil {
+	if err := syscall.Mkfifo(pipePath, 0o600); err != nil {
 		return fmt.Errorf("failed to create named pipe %s: %v", pipePath, err)
 	}
 	return nil
