@@ -158,6 +158,30 @@ func TestProcessGNSSMessageCorrelatesLatestStatusAndClock(t *testing.T) {
 	assert.Equal(t, int64(10), gnssData.Offset)
 }
 
+func TestProcessGNSSMessageMarksSpoofedNavigationAsSourceLost(t *testing.T) {
+	eventCh := make(chan event.Event, 1)
+	g := &GPSD{
+		processConfig: config.ProcessConfig{
+			EventChannel: eventCh,
+			GMThreshold:  config.Threshold{Max: 100},
+		},
+	}
+
+	assert.False(t, g.processGNSSMessage(ublox.Message{
+		Type:    ublox.NavStatusType,
+		Payload: ublox.NavStatus{GPSFix: 3, Flags2: ublox.SpoofDetectionSpoofing, ITOW: 100},
+	}))
+	assert.True(t, g.processGNSSMessage(ublox.Message{
+		Type:    ublox.NavClockType,
+		Payload: ublox.NavClock{Offset: 10, ITOW: 100},
+	}))
+
+	eventValue := <-eventCh
+	gnssData, ok := eventValue.Data.(*event.GNSSData)
+	require.True(t, ok)
+	assert.True(t, gnssData.SourceLost)
+}
+
 func TestProcessGNSSMessageCorrelatesClockBeforeStatus(t *testing.T) {
 	eventCh := make(chan event.Event, 1)
 	g := &GPSD{

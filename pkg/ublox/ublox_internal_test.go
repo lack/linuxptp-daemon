@@ -141,6 +141,7 @@ func TestParserDecodesTypedMessages(t *testing.T) {
 		assert.Equal(t, uint8(0xdd), status.Flags)
 		assert.Equal(t, uint8(0x0), status.FixStat)
 		assert.Equal(t, uint8(0x8), status.Flags2)
+		assert.False(t, status.SpoofingDetected())
 		assert.Equal(t, uint32(565), status.TTFF)
 		assert.Equal(t, uint32(807626316), status.MSSS)
 

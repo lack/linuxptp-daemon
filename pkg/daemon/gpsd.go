@@ -345,7 +345,10 @@ func (g *GPSD) checkForiTOWCorrelation() bool {
 
 	// Process the offset and GPSFixes from the correlated set
 	g.offset = clock.Offset
-	g.sourceLost = status.GPSFix < 3 || !g.isOffsetInRange()
+	// A spoofed navigation solution can retain a valid-looking fix and clock
+	// offset. Treat the receiver's spoofing detector as a lost GNSS source so
+	// the clock cannot remain locked to potentially forged time.
+	g.sourceLost = status.GPSFix < 3 || status.SpoofingDetected() || !g.isOffsetInRange()
 	if g.processConfig.EventChannel != nil {
 		select {
 		case g.processConfig.EventChannel <- event.Event{
