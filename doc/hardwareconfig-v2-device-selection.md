@@ -1,8 +1,7 @@
 # HardwareConfig v2 device selection
 
-This document records how GNSS device detection currently works and evaluates where
-HardwareConfig v2 could use stable Ethernet-device selectors instead of interface
-names.
+This document describes how GNSS device detection works and how HardwareConfig v2
+selectors identify Ethernet, serial, and USB devices.
 
 ## GNSS matcher
 
@@ -13,9 +12,12 @@ names.
 - `ethernetDevice`
 - `usbDevice`
 
-The selector should resolve to exactly one usable GNSS device. A zero-match or
-multiple-match result is an error; the implementation must not choose the first
-lexicographically sorted device when the selector is ambiguous.
+Hardware-oriented Ethernet and USB lookup must resolve to exactly one usable
+GNSS tty; no match or multiple matching tty devices is an error. `ttyDevice` is
+returned as supplied. A name-only Ethernet lookup directly reads that
+interface's `device/gnss/` directory; if that directory contains multiple GNSS
+entries, the current implementation logs a warning and chooses the
+lexicographically first entry. This is a legacy exception to strict uniqueness.
 
 ### Direct tty selection
 
@@ -25,45 +27,56 @@ hotplug events.
 
 ### Ethernet-device selection
 
-`ethernetDevice` is an Ethernet-device selector inspired by the SR-IOV Network
-Operator's `nicSelector`. It currently supports:
+`ethernetDevice` selects the Ethernet interface associated with the GNSS receiver.
+It supports any Linux interface name, a PCI function address, a permanent MAC
+address, and a firmware-reported PCI slot ID. For example, a Westport Channel
+(E810) setup can select a NIC by its interface name:
 
 ```yaml
-ethernetDevice:
-  name: eno8703
+match:
+  ethernetDevice:
+    name: ens2f0
 ```
 
-or PCI-oriented criteria:
+The name may be any current Linux interface name, including names such as
+`eno8703`, `enp2s0`, and `ens2f0`. For hardware-oriented selection, use
+`pciAddress`, `permanentMACAddress`, or `slot`:
 
 ```yaml
-ethernetDevice:
-  pciSlot: "0000:86:00.0"
-  vendor: "8086"
-  deviceID: "159b"
+match:
+  ethernetDevice:
+    pciAddress: "0000:86:00.0"
+    permanentMACAddress: "00:11:22:aa:bb:cc"
+    slot: "2"
 ```
 
-Selection behavior:
+The fields mean:
 
-1. If `name` is provided, it takes the direct lookup path:
-   `/sys/class/net/<name>/device/gnss/`.
-2. If `name` is omitted and `pciSlot` is provided, interfaces are found under:
-   `/sys/bus/pci/devices/<pci-slot>/net/`.
-3. If `vendor` and/or `deviceID` are provided, interfaces are enumerated from
-   `/sys/class/net`. Their resolved PCI device directories are matched against
-   the PCI `vendor` and `device` attributes.
-4. When multiple non-name criteria are provided, they are combined as AND
-   criteria.
-5. The selected interface's `device/gnss/` sysfs directory is used to resolve
-   the GNSS device node.
+- `pciAddress` is a PCI bus:device.function address (BDF), for example
+  `0000:86:00.0`. A short address such as `86:00.0` is normalized to the full
+  domain form. It identifies a PCI function, not a chassis slot.
+- `permanentMACAddress` is the permanent hardware MAC address, in colon-separated
+  form such as `00:11:22:aa:bb:cc`. The daemon reads it using `ethtool -P`;
+  it does not use the possibly overridden current MAC address.
+- `slot` is the decimal firmware-reported PCI slot ID used in systemd slot-based
+  interface names. In `ens2f0`, the slot component is `2`; it is not the PCI
+  bus number. Multiple PCI functions in one physical slot can share the slot ID.
 
-A short PCI address such as `86:00.0` may be normalized to the full domain form
-`0000:86:00.0`. PCI vendor and device IDs are hexadecimal values and are
-normalized before comparison.
+Every supplied selector is combined with the others using AND semantics. A
+name-only selector takes the direct `/sys/class/net/<name>/device/gnss/` lookup
+path; when a name is combined with hardware selectors, those selectors are
+checked against that named interface as well. Vendor and device IDs are not
+Ethernet selectors because identical NICs can share them.
 
-The name form is intentionally a fast, direct lookup. If a name is supplied
-alongside other criteria, the current behavior is to use the name rather than
-perform an additional identity check. A future API revision could instead
-validate all supplied fields together if that proves useful.
+For hardware-oriented selector lookup, the daemon enumerates `/sys/class/net`,
+resolves each interface's `device` symlink, and checks all requested criteria:
+PCI address, permanent MAC, and/or slot. For `slot`, it first checks the
+firmware `_SUN` value exposed through `firmware_node/sun`, then falls back to
+PCI slot address mappings under `/sys/bus/pci/slots`. The matching interface's
+`device/gnss/` directory is used to resolve the GNSS device node. A selector
+with no matching GNSS device, or one
+that resolves to multiple GNSS device nodes, returns an error rather than
+silently choosing one.
 
 ### ACPI serial-device selection
 
@@ -146,13 +159,31 @@ during verification.
 
 ### USB-device selection
 
-The GNR-D GNSS receiver is selected using:
+The GNR-D GNSS receiver is selected by its USB vendor and product IDs:
 
 ```yaml
-usbDevice:
-  vendor: "1546"
-  product: "01a9"
+match:
+  usbDevice:
+    vendor: "1546"
+    product: "01a9"
 ```
+
+If multiple identical receivers may be connected, specify the optional USB
+bus-port topology `path` as an additional selector:
+
+```yaml
+match:
+  usbDevice:
+    vendor: "1546"
+    product: "01a9"
+    path: "2-1.4"
+```
+
+The path is the bus-and-port chain shown in sysfs, such as the `2-1.4` device
+node in `/sys/devices/.../usb2/2-1/2-1.4`. It identifies where the receiver is
+connected, not the receiver itself, so it changes if the device is moved or the
+USB topology changes. Vendor, product, and path are all required to match when
+`path` is supplied.
 
 The detector does not depend on the tty name or on the `ttyACM`/`ttyUSB` driver
 name. It performs the following sysfs traversal:
@@ -164,7 +195,8 @@ name. It performs the following sysfs traversal:
 4. Walk the resolved device's parent directories.
 5. Identify USB device ancestors by their `subsystem` symlink and read
    `idVendor` and `idProduct`.
-6. Compare the normalized hexadecimal IDs with the requested selector.
+6. Compare the normalized hexadecimal IDs with the requested selector and, when
+   `path` is specified, require the USB device node's bus-port path to match.
 7. Return `/dev/<tty-name>` if exactly one tty matches.
 
 On the GNR-D system the relevant topology is:
@@ -185,9 +217,11 @@ The USB attributes are located at the `1-4` device node:
 ```
 
 The result is `/dev/ttyACM0`. The device has multiple USB interfaces, but only
-one currently produces a tty. If a future device exposes multiple tty nodes,
-the VID/PID selector alone is insufficient and detection must fail with an
-ambiguity error or use an additional interface-level criterion.
+one currently produces a tty.
+If multiple identical receivers are connected, the optional `path` narrows the
+match to the receiver on that bus-port chain. If the selected receiver itself
+exposes multiple matching tty nodes, resolution still fails with an ambiguity
+error; the topology path does not select between interfaces of one USB device.
 
 ## SR-IOV comparison
 
@@ -210,16 +244,14 @@ HardwareConfig v2 currently uses a simpler model:
 | SR-IOV concept | HardwareConfig v2 equivalent | Notes |
 |---|---|---|
 | `pfNames` | `ethernetDevice.name` | Direct Linux interface lookup |
-| `rootDevices` | `ethernetDevice.pciSlot` | PCI function/BDF lookup |
-| `vendor` | `ethernetDevice.vendor` | PCI vendor ID |
-| `deviceID` | `ethernetDevice.deviceID` | PCI device ID |
+| `rootDevices` | `ethernetDevice.pciAddress` | PCI function/BDF lookup |
+| `vendor` / `deviceID` | None | Not sufficiently specific to identify an Ethernet device |
 | `netFilter` | None | Platform-specific network identity is not currently needed |
 
-The relevant precedence is not “pick one matching field”; it is:
-
-- use an explicitly named interface directly;
-- otherwise combine the supplied hardware identity fields;
-- require the resulting GNSS device to be unique.
+The resolver applies every supplied Ethernet selector as an AND criterion. A
+name-only selector is a direct interface lookup; with additional selectors, the
+name identifies the candidate interface and the other fields further constrain
+it. The resulting GNSS device node must be unique.
 
 ## Other HardwareConfig v2 Ethernet references
 

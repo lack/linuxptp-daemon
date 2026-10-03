@@ -9,6 +9,9 @@ linuxptp-daemon runs as a Kubernetes DaemonSet and manages linuxptp processes (p
 It mounts `linuxptp-configmap` which contains aggregated ptp configurations and applies specific config for each node.
 Both linuxptp-daemon and linuxptp-configmap are created in the `openshift-ptp` namespace.
 
+For HardwareConfig v2 GNSS matcher behavior and selector examples, see
+[`doc/hardwareconfig-v2-device-selection.md`](doc/hardwareconfig-v2-device-selection.md).
+
 ## Quick Start
 
 ### Create namespace and ServiceAccount
