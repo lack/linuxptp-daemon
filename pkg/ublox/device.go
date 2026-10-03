@@ -67,14 +67,14 @@ func GNSSDeviceFromInterface(iface string) (string, error) {
 // device. Every supplied selector is applied as an AND criterion. A name-only
 // selector uses a direct interface lookup; selectors that identify hardware
 // are resolved against the interface's sysfs device information.
-func GNSSDeviceFromEthernetDevice(name, pciSlot, permanentMAC, slot string) (string, error) {
-	if name == "" && pciSlot == "" && permanentMAC == "" && slot == "" {
+func GNSSDeviceFromEthernetDevice(name, pciAddress, permanentMAC, slot string) (string, error) {
+	if name == "" && pciAddress == "" && permanentMAC == "" && slot == "" {
 		return "", fmt.Errorf("EthernetDevice has no selection criteria")
 	}
 
-	if pciSlot != "" {
+	if pciAddress != "" {
 		var err error
-		pciSlot, err = normalizePCISlot(pciSlot)
+		pciAddress, err = normalizePCIAddress(pciAddress)
 		if err != nil {
 			return "", err
 		}
@@ -94,7 +94,7 @@ func GNSSDeviceFromEthernetDevice(name, pciSlot, permanentMAC, slot string) (str
 		slot = normalized
 	}
 
-	if name != "" && pciSlot == "" && permanentMAC == "" && slot == "" {
+	if name != "" && pciAddress == "" && permanentMAC == "" && slot == "" {
 		return GNSSDeviceFromInterface(name)
 	}
 
@@ -104,18 +104,18 @@ func GNSSDeviceFromEthernetDevice(name, pciSlot, permanentMAC, slot string) (str
 	}
 	interfaces := make([]string, 0, len(entries))
 	for _, entry := range entries {
-		if ethernetInterfaceMatches(entry.Name(), name, pciSlot, permanentMAC, slot) {
+		if ethernetInterfaceMatches(entry.Name(), name, pciAddress, permanentMAC, slot) {
 			interfaces = append(interfaces, entry.Name())
 		}
 	}
 	return gnssDeviceFromInterfaces(interfaces, "EthernetDevice")
 }
 
-func ethernetInterfaceMatches(iface, name, pciSlot, permanentMAC, slot string) bool {
+func ethernetInterfaceMatches(iface, name, pciAddress, permanentMAC, slot string) bool {
 	if name != "" && iface != name {
 		return false
 	}
-	if pciSlot == "" && permanentMAC == "" && slot == "" {
+	if pciAddress == "" && permanentMAC == "" && slot == "" {
 		return true
 	}
 
@@ -123,7 +123,7 @@ func ethernetInterfaceMatches(iface, name, pciSlot, permanentMAC, slot string) b
 	if err != nil {
 		return false
 	}
-	if pciSlot != "" && !strings.EqualFold(filepath.Base(devicePath), pciSlot) {
+	if pciAddress != "" && !strings.EqualFold(filepath.Base(devicePath), pciAddress) {
 		return false
 	}
 	if permanentMAC != "" {
@@ -401,15 +401,15 @@ func normalizeUSBID(id string) (string, error) {
 	return normalizePCIID(id)
 }
 
-func normalizePCISlot(slot string) (string, error) {
-	slot = strings.TrimSpace(slot)
-	if filepath.Base(slot) != slot || slot == "." || slot == ".." {
-		return "", fmt.Errorf("invalid PCI slot %q", slot)
+func normalizePCIAddress(address string) (string, error) {
+	address = strings.TrimSpace(address)
+	if filepath.Base(address) != address || address == "." || address == ".." {
+		return "", fmt.Errorf("invalid PCI address %q", address)
 	}
-	if strings.Count(slot, ":") == 1 {
-		slot = "0000:" + slot
+	if strings.Count(address, ":") == 1 {
+		address = "0000:" + address
 	}
-	return slot, nil
+	return address, nil
 }
 
 func normalizePCIID(id string) (string, error) {
