@@ -222,6 +222,8 @@ If multiple identical receivers are connected, the optional `path` narrows the
 match to the receiver on that bus-port chain. If the selected receiver itself
 exposes multiple matching tty nodes, resolution still fails with an ambiguity
 error; the topology path does not select between interfaces of one USB device.
+Ambiguity errors and logs list the matched USB topology paths to help identify a
+`path` value to add to the HardwareConfig.
 
 ## SR-IOV comparison
 

@@ -365,6 +365,18 @@ func TestGNSSDeviceFromUSB(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "/dev/ttyACM0")
 		assert.Contains(t, err.Error(), "/dev/ttyACM1")
+		assert.Contains(t, err.Error(), "matched USB paths: 1-4")
+	})
+
+	t.Run("ambiguity lists every matching USB topology path", func(t *testing.T) {
+		ttyClassPath := makeUSBTTYFixtureAtPaths(t, map[string][]string{
+			"1-4":   {"ttyACM0"},
+			"2-1.4": {"ttyACM1"},
+		})
+
+		_, err := findTTYFromUSBDevice(ttyClassPath, "1546", "01a9", "")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "matched USB paths: 1-4, 2-1.4")
 	})
 
 	t.Run("topology path selects one of multiple identical devices", func(t *testing.T) {

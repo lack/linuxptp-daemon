@@ -11,6 +11,8 @@ Both linuxptp-daemon and linuxptp-configmap are created in the `openshift-ptp` n
 
 For HardwareConfig v2 GNSS matcher behavior and selector examples, see
 [`doc/hardwareconfig-v2-device-selection.md`](doc/hardwareconfig-v2-device-selection.md).
+When USB matching is ambiguous, daemon logs include the matching topology paths
+that can be used to narrow the selector.
 
 ## Quick Start
 

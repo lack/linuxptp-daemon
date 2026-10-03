@@ -325,6 +325,7 @@ func findTTYFromUSBDevice(ttyClassPath, vendor, product, topologyPath string) (s
 	}
 
 	var candidates []string
+	matchedPathSet := make(map[string]struct{})
 	for _, entry := range entries {
 		devicePath := filepath.Join(ttyClassPath, entry.Name(), "device")
 		resolvedDevicePath, err := filepath.EvalSymlinks(devicePath)
@@ -333,8 +334,9 @@ func findTTYFromUSBDevice(ttyClassPath, vendor, product, topologyPath string) (s
 			// resolvable device path.
 			continue
 		}
-		if usbDeviceMatches(resolvedDevicePath, vendor, product, topologyPath) {
+		if matchedPath, ok := usbDeviceMatchPath(resolvedDevicePath, vendor, product, topologyPath); ok {
 			candidates = append(candidates, filepath.Join("/dev", entry.Name()))
+			matchedPathSet[matchedPath] = struct{}{}
 		}
 	}
 
@@ -346,18 +348,27 @@ func findTTYFromUSBDevice(ttyClassPath, vendor, product, topologyPath string) (s
 		glog.Infof("Detected GNSS device %s", candidates[0])
 		return candidates[0], nil
 	default:
-		return "", fmt.Errorf("multiple tty devices found for USB device %s:%s at path %q: %s",
-			vendor, product, topologyPath, strings.Join(candidates, ", "))
+		matchedPaths := make([]string, 0, len(matchedPathSet))
+		for matchedPath := range matchedPathSet {
+			matchedPaths = append(matchedPaths, matchedPath)
+		}
+		sort.Strings(matchedPaths)
+		message := fmt.Sprintf("multiple tty devices found for USB device %s:%s at path %q: %s; matched USB paths: %s",
+			vendor, product, topologyPath, strings.Join(candidates, ", "), strings.Join(matchedPaths, ", "))
+		glog.Errorf("%s", message)
+		return "", fmt.Errorf("%s", message)
 	}
 }
 
-// usbDeviceMatches walks from a tty's sysfs device to its parents, looking for
-// a USB device node with matching IDs and, when provided, its bus-port path.
-func usbDeviceMatches(devicePath, vendor, product, topologyPath string) bool {
+// usbDeviceMatchPath walks from a tty's sysfs device to its parents, looking
+// for a USB device node with matching IDs and, when provided, its bus-port path.
+// It returns the matched USB topology path for diagnostic output.
+func usbDeviceMatchPath(devicePath, vendor, product, topologyPath string) (string, bool) {
 	for sysfsPath := devicePath; sysfsPath != "." && sysfsPath != string(filepath.Separator); sysfsPath = filepath.Dir(sysfsPath) {
 		subsystemPath, err := filepath.EvalSymlinks(filepath.Join(sysfsPath, "subsystem"))
 		if err == nil && filepath.Base(subsystemPath) == "usb" {
-			if topologyPath != "" && filepath.Base(sysfsPath) != topologyPath {
+			matchedPath := filepath.Base(sysfsPath)
+			if topologyPath != "" && matchedPath != topologyPath {
 				continue
 			}
 			actualVendor, vendorErr := os.ReadFile(filepath.Join(sysfsPath, "idVendor"))
@@ -365,11 +376,11 @@ func usbDeviceMatches(devicePath, vendor, product, topologyPath string) bool {
 			if vendorErr == nil && productErr == nil &&
 				strings.EqualFold(strings.TrimSpace(string(actualVendor)), vendor) &&
 				strings.EqualFold(strings.TrimSpace(string(actualProduct)), product) {
-				return true
+				return matchedPath, true
 			}
 		}
 	}
-	return false
+	return "", false
 }
 
 func validUSBTopologyPath(path string) bool {
