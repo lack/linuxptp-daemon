@@ -170,8 +170,8 @@ func FindGNSSDevice(matcher *ptpv2alpha1.GNSSMatcher) (string, error) {
 		return ublox.GNSSDeviceFromEthernetDevice(
 			matcher.EthernetDevice.Name,
 			matcher.EthernetDevice.PCISlot,
-			matcher.EthernetDevice.Vendor,
-			matcher.EthernetDevice.DeviceID,
+			matcher.EthernetDevice.PermanentMACAddress,
+			matcher.EthernetDevice.Slot,
 		)
 	}
 	if matcher.USBDevice != nil {
