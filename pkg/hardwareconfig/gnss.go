@@ -175,7 +175,7 @@ func FindGNSSDevice(matcher *ptpv2alpha1.GNSSMatcher) (string, error) {
 		)
 	}
 	if matcher.USBDevice != nil {
-		return ublox.GNSSDeviceFromUSB(matcher.USBDevice.Vendor, matcher.USBDevice.Product)
+		return ublox.GNSSDeviceFromUSB(matcher.USBDevice.Vendor, matcher.USBDevice.Product, matcher.USBDevice.Path)
 	}
 	return "", fmt.Errorf("GNSSMatcher has neither ttyDevice, serialDevice, ethernetDevice, nor usbDevice set")
 }

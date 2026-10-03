@@ -296,10 +296,10 @@ func acpiDeviceMatches(devicePath, hid, uid string) bool {
 }
 
 // GNSSDeviceFromUSB resolves the tty device exposed by a USB device with the
-// given hexadecimal vendor and product IDs. It enumerates tty class devices
-// and walks their sysfs ancestry, rather than relying on an unstable tty name
-// such as ttyACM0 or ttyUSB0.
-func GNSSDeviceFromUSB(vendor, product string) (string, error) {
+// given hexadecimal vendor and product IDs, optionally constrained by its USB
+// bus-port topology path. It enumerates tty class devices and walks their sysfs
+// ancestry, rather than relying on an unstable tty name such as ttyACM0.
+func GNSSDeviceFromUSB(vendor, product, topologyPath string) (string, error) {
 	rawVendor, rawProduct := vendor, product
 	vendor, err := normalizeUSBID(vendor)
 	if err != nil {
@@ -309,12 +309,16 @@ func GNSSDeviceFromUSB(vendor, product string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid USB product ID %q: %w", rawProduct, err)
 	}
+	topologyPath = strings.TrimSpace(topologyPath)
+	if topologyPath != "" && !validUSBTopologyPath(topologyPath) {
+		return "", fmt.Errorf("invalid USB topology path %q", topologyPath)
+	}
 
-	return findTTYFromUSBDevice(ttyClassSysfsPath, vendor, product)
+	return findTTYFromUSBDevice(ttyClassSysfsPath, vendor, product, topologyPath)
 }
 
-func findTTYFromUSBDevice(ttyClassPath, vendor, product string) (string, error) {
-	glog.Infof("Looking for GNSS tty exposed by USB device %s:%s", vendor, product)
+func findTTYFromUSBDevice(ttyClassPath, vendor, product, topologyPath string) (string, error) {
+	glog.Infof("Looking for GNSS tty exposed by USB device %s:%s at path %q", vendor, product, topologyPath)
 	entries, err := ReadDir(ttyClassPath)
 	if err != nil {
 		return "", fmt.Errorf("cannot enumerate tty devices: %w", err)
@@ -329,7 +333,7 @@ func findTTYFromUSBDevice(ttyClassPath, vendor, product string) (string, error) 
 			// resolvable device path.
 			continue
 		}
-		if usbDeviceMatches(resolvedDevicePath, vendor, product) {
+		if usbDeviceMatches(resolvedDevicePath, vendor, product, topologyPath) {
 			candidates = append(candidates, filepath.Join("/dev", entry.Name()))
 		}
 	}
@@ -337,24 +341,27 @@ func findTTYFromUSBDevice(ttyClassPath, vendor, product string) (string, error) 
 	sort.Strings(candidates)
 	switch len(candidates) {
 	case 0:
-		return "", fmt.Errorf("no tty device found for USB device %s:%s", vendor, product)
+		return "", fmt.Errorf("no tty device found for USB device %s:%s at path %q", vendor, product, topologyPath)
 	case 1:
 		glog.Infof("Detected GNSS device %s", candidates[0])
 		return candidates[0], nil
 	default:
-		return "", fmt.Errorf("multiple tty devices found for USB device %s:%s: %s",
-			vendor, product, strings.Join(candidates, ", "))
+		return "", fmt.Errorf("multiple tty devices found for USB device %s:%s at path %q: %s",
+			vendor, product, topologyPath, strings.Join(candidates, ", "))
 	}
 }
 
 // usbDeviceMatches walks from a tty's sysfs device to its parents, looking for
-// a USB device node with matching idVendor and idProduct attributes.
-func usbDeviceMatches(devicePath, vendor, product string) bool {
-	for path := devicePath; path != "." && path != string(filepath.Separator); path = filepath.Dir(path) {
-		subsystemPath, err := filepath.EvalSymlinks(filepath.Join(path, "subsystem"))
+// a USB device node with matching IDs and, when provided, its bus-port path.
+func usbDeviceMatches(devicePath, vendor, product, topologyPath string) bool {
+	for sysfsPath := devicePath; sysfsPath != "." && sysfsPath != string(filepath.Separator); sysfsPath = filepath.Dir(sysfsPath) {
+		subsystemPath, err := filepath.EvalSymlinks(filepath.Join(sysfsPath, "subsystem"))
 		if err == nil && filepath.Base(subsystemPath) == "usb" {
-			actualVendor, vendorErr := os.ReadFile(filepath.Join(path, "idVendor"))
-			actualProduct, productErr := os.ReadFile(filepath.Join(path, "idProduct"))
+			if topologyPath != "" && filepath.Base(sysfsPath) != topologyPath {
+				continue
+			}
+			actualVendor, vendorErr := os.ReadFile(filepath.Join(sysfsPath, "idVendor"))
+			actualProduct, productErr := os.ReadFile(filepath.Join(sysfsPath, "idProduct"))
 			if vendorErr == nil && productErr == nil &&
 				strings.EqualFold(strings.TrimSpace(string(actualVendor)), vendor) &&
 				strings.EqualFold(strings.TrimSpace(string(actualProduct)), product) {
@@ -363,6 +370,31 @@ func usbDeviceMatches(devicePath, vendor, product string) bool {
 		}
 	}
 	return false
+}
+
+func validUSBTopologyPath(path string) bool {
+	parts := strings.Split(path, "-")
+	if len(parts) != 2 || !decimalUSBPathComponent(parts[0]) {
+		return false
+	}
+	for _, port := range strings.Split(parts[1], ".") {
+		if !decimalUSBPathComponent(port) {
+			return false
+		}
+	}
+	return true
+}
+
+func decimalUSBPathComponent(value string) bool {
+	if value == "" {
+		return false
+	}
+	for _, digit := range value {
+		if digit < '0' || digit > '9' {
+			return false
+		}
+	}
+	return true
 }
 
 func normalizeUSBID(id string) (string, error) {

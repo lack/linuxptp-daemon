@@ -140,38 +140,46 @@ func setupEthernetSysfsFixture(t *testing.T, devices []ethernetFixtureDevice, gn
 
 func makeUSBTTYFixture(t *testing.T, ttyNames ...string) string {
 	t.Helper()
+	return makeUSBTTYFixtureAtPaths(t, map[string][]string{"1-4": ttyNames})
+}
+
+func makeUSBTTYFixtureAtPaths(t *testing.T, devices map[string][]string) string {
+	t.Helper()
 
 	root := t.TempDir()
 	ttyClassPath := filepath.Join(root, "sys", "class", "tty")
 	usbBusPath := filepath.Join(root, "sys", "bus", "usb")
-	usbDevicePath := filepath.Join(root, "sys", "devices", "usb1", "1-4")
-	usbInterfacePath := filepath.Join(usbDevicePath, "1-4:1.0")
+	for topologyPath, ttyNames := range devices {
+		busNumber := strings.SplitN(topologyPath, "-", 2)[0]
+		usbDevicePath := filepath.Join(root, "sys", "devices", "usb"+busNumber, topologyPath)
+		usbInterfacePath := filepath.Join(usbDevicePath, topologyPath+":1.0")
 
-	for _, path := range []string{ttyClassPath, usbBusPath, usbDevicePath, usbInterfacePath} {
-		if err := os.MkdirAll(path, 0o755); err != nil {
+		for _, path := range []string{ttyClassPath, usbBusPath, usbDevicePath, usbInterfacePath} {
+			if err := os.MkdirAll(path, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := os.WriteFile(filepath.Join(usbDevicePath, "idVendor"), []byte("1546\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-	}
-	if err := os.WriteFile(filepath.Join(usbDevicePath, "idVendor"), []byte("1546\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(usbDevicePath, "idProduct"), []byte("01a9\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(usbBusPath, filepath.Join(usbDevicePath, "subsystem")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(usbBusPath, filepath.Join(usbInterfacePath, "subsystem")); err != nil {
-		t.Fatal(err)
-	}
-
-	for _, ttyName := range ttyNames {
-		ttyPath := filepath.Join(ttyClassPath, ttyName)
-		if err := os.MkdirAll(ttyPath, 0o755); err != nil {
+		if err := os.WriteFile(filepath.Join(usbDevicePath, "idProduct"), []byte("01a9\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.Symlink(usbInterfacePath, filepath.Join(ttyPath, "device")); err != nil {
+		if err := os.Symlink(usbBusPath, filepath.Join(usbDevicePath, "subsystem")); err != nil {
 			t.Fatal(err)
+		}
+		if err := os.Symlink(usbBusPath, filepath.Join(usbInterfacePath, "subsystem")); err != nil {
+			t.Fatal(err)
+		}
+
+		for _, ttyName := range ttyNames {
+			ttyPath := filepath.Join(ttyClassPath, ttyName)
+			if err := os.MkdirAll(ttyPath, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.Symlink(usbInterfacePath, filepath.Join(ttyPath, "device")); err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	return ttyClassPath
@@ -337,7 +345,7 @@ func TestGNSSDeviceFromUSB(t *testing.T) {
 	t.Run("finds tty by vendor and product", func(t *testing.T) {
 		ttyClassPath := makeUSBTTYFixture(t, "ttyACM0")
 
-		device, err := findTTYFromUSBDevice(ttyClassPath, "1546", "01A9")
+		device, err := findTTYFromUSBDevice(ttyClassPath, "1546", "01A9", "")
 		assert.NoError(t, err)
 		assert.Equal(t, "/dev/ttyACM0", device)
 	})
@@ -345,7 +353,7 @@ func TestGNSSDeviceFromUSB(t *testing.T) {
 	t.Run("returns an error when no tty matches", func(t *testing.T) {
 		ttyClassPath := makeUSBTTYFixture(t, "ttyACM0")
 
-		_, err := findTTYFromUSBDevice(ttyClassPath, "1546", "0001")
+		_, err := findTTYFromUSBDevice(ttyClassPath, "1546", "0001", "")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "no tty device found")
 	})
@@ -353,10 +361,35 @@ func TestGNSSDeviceFromUSB(t *testing.T) {
 	t.Run("returns an error when USB device exposes multiple ttys", func(t *testing.T) {
 		ttyClassPath := makeUSBTTYFixture(t, "ttyACM0", "ttyACM1")
 
-		_, err := findTTYFromUSBDevice(ttyClassPath, "1546", "01a9")
+		_, err := findTTYFromUSBDevice(ttyClassPath, "1546", "01a9", "")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "/dev/ttyACM0")
 		assert.Contains(t, err.Error(), "/dev/ttyACM1")
+	})
+
+	t.Run("topology path selects one of multiple identical devices", func(t *testing.T) {
+		ttyClassPath := makeUSBTTYFixtureAtPaths(t, map[string][]string{
+			"1-4":   {"ttyACM0"},
+			"2-1.4": {"ttyACM1"},
+		})
+
+		device, err := findTTYFromUSBDevice(ttyClassPath, "1546", "01a9", "2-1.4")
+		assert.NoError(t, err)
+		assert.Equal(t, "/dev/ttyACM1", device)
+	})
+
+	t.Run("path with no matching device returns an error", func(t *testing.T) {
+		ttyClassPath := makeUSBTTYFixture(t, "ttyACM0")
+
+		_, err := findTTYFromUSBDevice(ttyClassPath, "1546", "01a9", "1-5")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), `at path "1-5"`)
+	})
+
+	t.Run("validates USB topology path syntax", func(t *testing.T) {
+		assert.False(t, validUSBTopologyPath("../1-4"))
+		assert.False(t, validUSBTopologyPath("1-"))
+		assert.True(t, validUSBTopologyPath("2-1.4"))
 	})
 }
 
