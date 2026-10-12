@@ -9,12 +9,13 @@ IMAGE_TAG_BASE ?= ghcr.io/k8snetworkplumbingwg/$(IMAGE_NAME)
 VERSION ?=latest
 IMG ?= $(IMAGE_TAG_BASE):$(VERSION)
 CONTAINER_TOOL ?=docker
+BUILD_NETWORK ?=host
 
 .PHONY: test
 default:
 	./hack/build.sh
 image:
-	./hack/build-image.sh
+	BUILD_NETWORK="$(BUILD_NETWORK)" ./hack/build-image.sh
 push:
 	$(CONTAINER_TOOL) push $(IMG)
 clean:

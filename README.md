@@ -94,6 +94,8 @@ metadata:
 $ make image
 ```
 
+The image builder uses the UBI 9 Go 1.26 toolchain required by `go.mod` and host networking by default. To select a different build network, use `BUILD_NETWORK=bridge make image` (or another network mode supported by your container engine).
+
 2. This deploys a linuxptp-daemon pod on each node, the daemon mounts linuxptp-configmap and configures the linuxptp
 processes(ptp4l, phc2sys) according to data sources as specified for the specific node in the ConfigMap.
 
