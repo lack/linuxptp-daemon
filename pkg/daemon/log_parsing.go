@@ -216,14 +216,17 @@ func processParsedMetrics(process *ptpProcess, ptpMetrics *parser.Metrics) {
 
 // processParsedEvent handles PTP events extracted by the parser
 func processParsedEvent(process *ptpProcess, ptpEvent *parser.PTPEvent) {
-	if process.name == phc2sysProcessName {
+	switch process.name {
+	case phc2sysProcessName:
 		processPhc2sysSelectedSource(process, ptpEvent)
-		return
+	case ptp4lProcessName:
+		processPtp4lEvent(process, ptpEvent)
+	case ts2phcProcessName:
+		process.processTS2PhcEvent(ptpEvent)
 	}
-	if process.name != ptp4lProcessName {
-		return
-	}
+}
 
+func processPtp4lEvent(process *ptpProcess, ptpEvent *parser.PTPEvent) {
 	// Update interface role metrics
 	if ptpEvent.PortID > 0 && len(process.ifaces) >= ptpEvent.PortID-1 {
 		configName := strings.Replace(strings.Replace(process.messageTag, "]", "", 1), "[", "", 1)
